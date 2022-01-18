@@ -1,6 +1,6 @@
 use std::cmp::max;
 use std::marker::PhantomData;
-use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Lens, LifeCycle, LifeCycleCtx, PaintCtx, UpdateCtx, Widget, WidgetPod};
+use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Lens, LifeCycle, LifeCycleCtx, PaintCtx, Point, UpdateCtx, Widget, WidgetPod, Data, Size};
 use druid::lens::Identity;
 use druid::widget::ListIter;
 use crate::TableMeta;
@@ -8,9 +8,9 @@ use crate::TableMeta;
 pub trait TableLine<T> {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut T, env: &Env);
 
-    fn lifecycle(&mut self, ctx: &LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env);
+    fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env);
 
-    fn update(&mut self, ctx: &UpdateCtx, data: &T, env: &Env);
+    fn update(&mut self, ctx: &mut UpdateCtx, data: &T, env: &Env);
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env, meta: &mut TableMeta, line_index: usize);
 
@@ -32,7 +32,7 @@ pub struct WidgetTableLine<
     outer_lens: L1,
     inner_lens: L2,
     widgets: Vec<WidgetPod<V, W>>,
-    generate: Box<dyn Fn() -> W>,
+    generate: Box<dyn Fn() -> WidgetPod<V, W>>,
     phantom: PhantomData<(S, T, U)>,
 }
 
@@ -44,16 +44,29 @@ impl<
 
     L1: Lens<S, T>,
     L2: Lens<U, V>,
-    W: Widget<V>,
+    W: Widget<V> + 'static,
 > WidgetTableLine<S, T, U, V, L1, L2, W> {
-    pub fn new(outer_lens: L1, inner_lens: L2, generate: impl Fn() -> W) -> Self {
+    pub fn new(outer_lens: L1, inner_lens: L2, generate: impl Fn() -> W + 'static) -> Self {
         Self {
             outer_lens,
             inner_lens,
             widgets: vec![],
-            generate: Box::new(generate),
+            generate: Box::new(move||WidgetPod::new(generate())),
             phantom: Default::default()
         }
+    }
+
+    fn update_widget_count(&mut self, data: &S) {
+        let Self {outer_lens, inner_lens, widgets, generate, ..} = self;
+        outer_lens.with(data, |data| {
+            if widgets.len() > data.data_len() {
+                println!("remove {} widgets", widgets.len() - data.data_len());
+                widgets.truncate(data.data_len());
+            } else if widgets.len() < data.data_len() {
+                println!("add {} widgets", data.data_len() - widgets.len());
+                widgets.extend(std::iter::repeat_with(generate).take(data.data_len() - widgets.len()));
+            }
+        });
     }
 }
 
@@ -65,41 +78,53 @@ impl<
 
     L1: Lens<S, T>,
     L2: Lens<U, V>,
-    W: Widget<V>,
+    W: Widget<V> + 'static,
 > TableLine<S> for WidgetTableLine<S, T, U, V, L1, L2, W> {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut S, env: &Env) {
-        self.outer_lens.with_mut(data, |data|data.for_each_mut(|data, index|self.lens.with_mut(data, |data|{
-            self.widgets[index].event(ctx, event, data, env);
+        let Self {outer_lens, inner_lens, widgets, ..} = self;
+        outer_lens.with_mut(data, |data|data.for_each_mut(|data, index|inner_lens.with_mut(data, |data|{
+            widgets[index].event(ctx, event, data, env);
         })));
     }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &S, env: &Env) {
-        self.outer_lens.with(data, |data|data.for_each(|data, index|self.lens.with(data, |data|{
-            self.widgets[index].lifecycle(ctx, event, data, env);
+        if let LifeCycle::WidgetAdded = event {
+            self.update_widget_count(data);
+        }
+
+        let Self {outer_lens, inner_lens, widgets, ..} = self;
+        outer_lens.with(data, |data|data.for_each(|data, index|inner_lens.with(data, |data|{
+            widgets[index].lifecycle(ctx, event, data, env);
         })));
     }
 
     fn update(&mut self, ctx: &mut UpdateCtx, data: &S, env: &Env) {
-        if self.widgets.len() > data.data_len() {
-            self.widgets.truncate(data.data_len());
-        } else if self.widgets.len() < data.data_len() {
-            self.widgets.extend(std::iter::repeat_with(&self.generate).take(data.data_len() - self.widgets.len()))
-        }
+        self.update_widget_count(data);
 
-        self.outer_lens.with(data, |data|data.for_each(|data, index|self.lens.with(data, |data|{
-            self.widgets[index].update(ctx, data, env);
+        let Self {outer_lens, inner_lens, widgets, ..} = self;
+        outer_lens.with(data, |data|data.for_each(|data, index|inner_lens.with(data, |data|{
+            widgets[index].update(ctx, data, env);
         })));
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &S, env: &Env, _: &mut TableMeta, _: usize) {
-        self.outer_lens.with(data, |data|data.for_each(|data, index|self.lens.with(data, |data|{
-            self.widgets[index].paint(ctx, data, env);
+        let Self {outer_lens, inner_lens, widgets, ..} = self;
+        outer_lens.with(data, |data|data.for_each(|data, index|inner_lens.with(data, |data|{
+            widgets[index].paint(ctx, data, env);
         })));
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &S, env: &Env, meta: &mut TableMeta, line_index: usize) {
-        let mut current_line_length = 0.0;
-        self.outer_lens.with(data, |data|data.for_each(|data, index|self.lens.with(data, |data|{
+
+        //TODO ensure all lines have the same length
+        if meta.line_element_sizes.len() < self.widgets.len() {
+            meta.line_element_sizes.extend(std::iter::repeat(0.0).take(self.widgets.len() - meta.line_element_sizes.len()));
+        } else if meta.line_element_sizes.len() > self.widgets.len() {
+            meta.line_element_sizes.truncate(self.widgets.len());
+        }
+
+        let Self {outer_lens, inner_lens, widgets, ..} = self;
+        outer_lens.with(data, |data|data.for_each(|data, index|inner_lens.with(data, |data|{
             let (min_line, max_line) = if meta.line_size_fixed {
                 (meta.line_sizes[line_index], meta.line_sizes[line_index])
             } else {
@@ -115,7 +140,7 @@ impl<
                 Size::from(meta.line_axis.pack(max_element, max_line)),
             );
 
-            let size = self.widgets[index].layout(ctx, &inner_bc, inner, env);
+            let size = widgets[index].layout(ctx, &inner_bc, data, env);
 
             if !meta.line_size_fixed {
                 meta.line_sizes[line_index] = meta.line_axis.minor(size);
@@ -129,15 +154,16 @@ impl<
         })));
     }
 
-    fn arrange(&mut self, ctx: &mut LayoutCtx, data: &S, env: &Env, meta: &TableMeta, line_index: usize) {
-        self.outer_lens.with(data, |data|data.for_each(|data, index|self.lens.with(data, |data|{
-            self.widgets[index].set_origin(ctx, data, env, Pont::from(meta.line_axis.pack(
+    fn arrange(&mut self, ctx: &mut LayoutCtx, data: &S, env: &Env, meta: &mut TableMeta, line_index: usize) {
+        let Self {outer_lens, inner_lens, widgets, ..} = self;
+        outer_lens.with(data, |data|data.for_each(|data, index|inner_lens.with(data, |data|{
+            widgets[index].set_origin(ctx, data, env, Point::from(meta.line_axis.pack(
                 meta.line_element_sizes[index],
                 meta.line_sizes[line_index],
             )));
 
             //TODO: set paint insets
-        }));
+        })));
     }
 }
 

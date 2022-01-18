@@ -1,4 +1,4 @@
-use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Lens, LifeCycle, LifeCycleCtx, PaintCtx, Size, UpdateCtx, Widget};
+use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Data, Lens, LifeCycle, LifeCycleCtx, PaintCtx, Size, UpdateCtx, Widget};
 use druid::widget::{Axis, ListIter};
 use crate::{Static, TableLine, TableMeta, TablePolicy, WidgetTableLine};
 
@@ -24,17 +24,17 @@ impl<T: Data> Table<T, Static> {
     }
 
     pub fn with_line<
-        S: Data,
-        T: ListIter<U> + Data,
+        T2: ListIter<U> + Data,
         U: Data,
         V: Data,
 
-        L1: Lens<S, T>,
-        L2: Lens<U, V>,
-        W: Widget<V>,
-        F: Fn() -> W,
+        L1: Lens<T, T2> + 'static,
+        L2: Lens<U, V> + 'static,
+        W: Widget<V> + 'static,
+        F: Fn() -> W + 'static,
     >(mut self, outer_lens: L1, inner_lens: L2, widget: F) -> Self {
         self.lines.push(Box::new(WidgetTableLine::new(outer_lens, inner_lens, widget)));
+        self.meta.line_sizes.push(0.0);
         self
     }
 
@@ -76,8 +76,8 @@ impl<T: Data, P: TablePolicy<T>> Widget<T> for Table<T, P> {
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {
-        for line in &mut self.lines {
-            line.paint(ctx, data, env);
+        for (index, line) in self.lines.iter_mut().enumerate() {
+            line.paint(ctx, data, env, &mut self.meta, index);
         }
     }
 }

@@ -1,4 +1,5 @@
 use druid::widget::ListIter;
+use druid::Data;
 use crate::{LineHeader, TableLine, TableMeta};
 
 pub trait TablePolicy<T> {
@@ -6,7 +7,7 @@ pub trait TablePolicy<T> {
 }
 
 pub trait HeaderTablePolicy<T>: TablePolicy<T> {
-    fn update_headers(&mut self, old_data: &T, data: &T, widgets: &mut LineHeader<T, Self>, meta: &mut TableMeta);
+    fn update_headers(&mut self, old_data: &T, data: &T, widgets: &mut LineHeader<T, Self>, meta: &mut TableMeta) where Self: Sized;
 }
 
 pub struct Static;

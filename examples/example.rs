@@ -1,5 +1,6 @@
 use std::sync::Arc;
-use druid::{AppLauncher, ArcStr, UnitPoint, Widget, WidgetExt, WindowDesc};
+use druid::{AppLauncher, ArcStr, UnitPoint, Widget, WidgetExt, WindowDesc, Data, Lens};
+use druid::im::Vector;
 use druid::lens::Identity;
 use druid::widget::{Axis, Slider, TextBox};
 use druid_table::Table;
@@ -18,9 +19,21 @@ fn root_widget() -> impl Widget<Vector<AppData>> {
 }
 
 fn main() {
-    let data = Vector::new();
+    let mut data = Vector::new();
+    data.push_back(AppData {
+        name: Arc::new("Test".to_string()),
+        count: 3.0
+    });
+    data.push_back(AppData {
+        name: Arc::new("Test2".to_string()),
+        count: 5.0
+    });
+    data.push_back(AppData {
+        name: Arc::new("Tegrdthfztdgrsefrgdst".to_string()),
+        count: 7.0
+    });
 
-    let window = WindowDesc::new(root_widget())
+    let window = WindowDesc::new(root_widget)
         .title("test table");
 
     AppLauncher::with_window(window)
