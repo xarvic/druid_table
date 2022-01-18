@@ -69,10 +69,12 @@ impl<T: Data, P: TablePolicy<T>> Widget<T> for Table<T, P> {
             line.arrange(ctx, data, env, &mut self.meta, index);
         }
 
-        Size::from(self.meta.line_axis.pack(
+
+        let size = Size::from(self.meta.line_axis.pack(
             self.meta.line_element_sizes.iter().sum(),
             self.meta.line_sizes.iter().sum(),
-        ))
+        ));
+        size
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {

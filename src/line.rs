@@ -128,27 +128,26 @@ impl<
             let (min_line, max_line) = if meta.line_size_fixed {
                 (meta.line_sizes[line_index], meta.line_sizes[line_index])
             } else {
-                (meta.line_axis.minor(bc.min()), meta.line_axis.minor(bc.min()))
+                (meta.line_axis.minor(bc.min()), meta.line_axis.minor(bc.max()))
             };
             let (min_element, max_element) = if meta.line_size_fixed {
                 (meta.line_sizes[line_index], meta.line_sizes[line_index])
             } else {
-                (meta.line_axis.minor(bc.min()), meta.line_axis.minor(bc.min()))
+                (meta.line_axis.minor(bc.min()), meta.line_axis.minor(bc.max()))
             };
             let inner_bc = BoxConstraints::new(
                 Size::from(meta.line_axis.pack(min_element, min_line)),
                 Size::from(meta.line_axis.pack(max_element, max_line)),
             );
 
-
             let size = widgets[index].layout(ctx, &inner_bc, data, env);
 
             if !meta.line_size_fixed {
-                meta.line_sizes[line_index] = meta.line_axis.minor(size);
+                meta.line_sizes[line_index] = meta.line_sizes[line_index].max(meta.line_axis.minor(size));
             }
 
             if !meta.line_element_size_fixed {
-                meta.line_element_sizes[index] = meta.line_axis.major(size);
+                meta.line_element_sizes[index] = meta.line_element_sizes[index].max(meta.line_axis.major(size));
             }
 
             //TODO: align to baseline
@@ -156,12 +155,15 @@ impl<
     }
 
     fn arrange(&mut self, ctx: &mut LayoutCtx, data: &S, env: &Env, meta: &mut TableMeta, line_index: usize) {
+        let line_offset = meta.line_sizes.iter().take(line_index).sum();
+        let mut element_offset = 0.0;
         let Self {outer_lens, inner_lens, widgets, ..} = self;
         outer_lens.with(data, |data|data.for_each(|data, index|inner_lens.with(data, |data|{
             widgets[index].set_origin(ctx, data, env, Point::from(meta.line_axis.pack(
-                meta.line_element_sizes[index],
-                meta.line_sizes[line_index],
+                element_offset,
+                line_offset,
             )));
+            element_offset += meta.line_element_sizes[index];
 
             //TODO: set paint insets
         })));
