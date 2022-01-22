@@ -2,7 +2,7 @@ use std::sync::Arc;
 use druid::{AppLauncher, ArcStr, UnitPoint, Widget, WidgetExt, WindowDesc, Data, Lens};
 use druid::im::Vector;
 use druid::lens::Identity;
-use druid::widget::{Axis, Slider, TextBox};
+use druid::widget::{Axis, Button, Flex, Slider, TextBox};
 use druid_table::Table;
 
 #[derive(Clone, Data, Lens)]
@@ -12,9 +12,19 @@ struct AppData {
 }
 
 fn root_widget() -> impl Widget<Vector<AppData>> {
-    Table::new_static(Axis::Vertical)
-        .with_line(Identity, AppData::name, ||TextBox::new())
-        .with_line(Identity, AppData::count, ||Slider::new().with_range(0.0, 10.0))
+    let table = Table::new_static(Axis::Vertical)
+        .with_line(Identity, AppData::name, ||TextBox::multiline())
+        .with_line(Identity, AppData::count, ||Slider::new().with_range(0.0, 10.0));
+
+    Flex::column()
+        .with_child(table)
+        .with_child(
+            Button::new("Add")
+                .on_click(|_, data: &mut Vector<AppData>, _|data.push_back(AppData {
+                    name: Arc::new("".to_string()),
+                    count: 0.0
+                }))
+        )
         .center()
 }
 

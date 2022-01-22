@@ -7,6 +7,7 @@ use crate::Table;
 
 struct HeaderTable<T, P: HeaderTablePolicy<T>> {
     table: Scroll<T, Table<T, P>>,
+
     line_header: ClipBox<T, LineHeader<T, P>>,
     line_header_size: f64,
 
@@ -22,7 +23,7 @@ impl<T: Data, P: HeaderTablePolicy<T>> HeaderTable<T, P> {
 
         if self.current_offset != offset {
             self.current_offset = offset;
-            let line_axis = self.table.child().meta.line_axis;
+            let line_axis = self.table.child().layout.line_axis();
             let line_offset = line_axis.minor(offset);
             let element_offset = line_axis.major(offset);
 
