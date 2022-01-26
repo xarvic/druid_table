@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use druid::{AppLauncher, ArcStr, UnitPoint, Widget, WidgetExt, WindowDesc, Data, Lens};
+use druid::{AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens};
 use druid::im::Vector;
 use druid::lens::Identity;
 use druid::widget::{Axis, Button, Flex, Slider, TextBox};
@@ -43,7 +43,7 @@ fn main() {
         count: 7.0
     });
 
-    let window = WindowDesc::new(root_widget)
+    let window = WindowDesc::new(root_widget())
         .title("test table");
 
     AppLauncher::with_window(window)
