@@ -38,7 +38,7 @@ impl TableLayout {
 
     pub fn prepare_layout(&mut self, max_size: Size) {
         self.line_layout.prepare_layout(self.line_axis.minor(max_size));
-        self.line_layout.prepare_layout(self.line_axis.major(max_size));
+        self.element_layout.prepare_layout(self.line_axis.major(max_size));
     }
 
     pub fn layout_rect(&self, line: usize, element: usize) -> Rect {
@@ -173,7 +173,7 @@ impl AxisPart {
     pub fn new(size: Option<f64>) -> Self {
         AxisPart {
             size: 0.0,
-            min: size.unwrap_or(60.0),
+            min: size.unwrap_or(0.0),
             max: size.unwrap_or(f64::INFINITY),
             is_fixed: size.is_some(),
         }
