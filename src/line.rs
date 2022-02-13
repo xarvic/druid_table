@@ -1,5 +1,6 @@
 use std::cmp::max;
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Lens, LifeCycle, LifeCycleCtx, PaintCtx, Point, UpdateCtx, Widget, WidgetPod, Data, Size};
 use druid::lens::Identity;
 use druid::widget::ListIter;
@@ -19,6 +20,36 @@ pub trait TableLine<T> {
     fn arrange(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize);
 
     fn element_count(&self, data: &T) -> usize;
+}
+
+impl<T: Data> TableLine<T> for Box<dyn TableLine<T>> {
+    fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut T, env: &Env) {
+        self.deref_mut().event(ctx, event, data, env);
+    }
+
+    fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
+        self.deref_mut().lifecycle(ctx, event, data, env);
+    }
+
+    fn update(&mut self, ctx: &mut UpdateCtx, data: &T, env: &Env) {
+        self.deref_mut().update(ctx, data, env);
+    }
+
+    fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize) {
+        self.deref_mut().paint(ctx, data, env, meta, line_index);
+    }
+
+    fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize) {
+        self.deref_mut().layout(ctx, bc, data, env, meta, line_index);
+    }
+
+    fn arrange(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize) {
+        self.deref_mut().arrange(ctx, data, env, meta, line_index);
+    }
+
+    fn element_count(&self, data: &T) -> usize {
+        self.deref().element_count(data)
+    }
 }
 
 pub struct WidgetTableLine<

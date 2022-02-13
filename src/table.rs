@@ -6,7 +6,7 @@ use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Data, Lens, LifeCyc
 use druid::lens::Ref;
 use druid::widget::{Axis, ListIter};
 use crate::{Static, TableLine, TableLayout, TablePolicy, WidgetTableLine};
-use crate::meta::AxisPart;
+use crate::layout::AxisPart;
 
 pub struct Table<T, P: TablePolicy<T>> {
     pub(crate) layout: Rc<RefCell<TableLayout>>,
@@ -29,13 +29,17 @@ impl<T: Data> Table<T, Static> {
         W: Widget<V> + 'static,
         F: Fn() -> W + 'static,
     >(mut self, outer_lens: L1, inner_lens: L2, widget: F) -> Self {
-        self.lines.push(Box::new(WidgetTableLine::new(outer_lens, inner_lens, widget)));
-        self.layout_mut().lines_mut().add_part(AxisPart::new(None));
+        self.with_custom_line(WidgetTableLine::new(outer_lens, inner_lens, widget))
+    }
+
+    pub fn with_custom_line<L: TableLine<T> + 'static>(mut self, line: L) -> Self {
+        self.add_line(line);
         self
     }
 
-    pub fn with_custom_line(mut self, ) {
-
+    pub(crate) fn add_line<L: TableLine<T> + 'static>(&mut self, line: L) {
+        self.lines.push(Box::new(line));
+        self.layout_mut().lines_mut().add_part(AxisPart::new(None));
     }
 }
 

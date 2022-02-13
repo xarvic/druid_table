@@ -1,5 +1,6 @@
-use druid::{BoxConstraints, Rect, Size};
+use druid::{BoxConstraints, Rect, Size, Vec2, Data};
 use druid::widget::Axis;
+use crate::util::set_len;
 
 pub struct TableLayout {
     element_layout: AxisLayout,
@@ -13,7 +14,7 @@ pub struct AxisLayout {
     max_additional_size: f64,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Data)]
 pub struct AxisPart {
     size: f64,
     min: f64,
@@ -63,6 +64,18 @@ impl TableLayout {
         self.element_layout.set_size(element, self.line_axis.major(size));
     }
 
+    pub fn as_cell_offset(&self, offset: Vec2) -> (Vec2, u64, u64) {
+        let line_offset = self.line_layout.as_cell_offset(self.line_axis.major(offset.to_size()));
+        let element_offset = self.element_layout.as_cell_offset(self.line_axis.minor(offset.to_size()));
+        (Vec2::from(self.line_axis.pack(element_offset.0, line_offset.0)), line_offset.1, element_offset.1)
+    }
+
+    pub fn from_cell_offset(&self, offset_tuple: (Vec2, u64, u64)) -> Vec2 {
+        let line_offset = self.line_layout.from_cell_offset((self.line_axis.minor(offset_tuple.0.to_size()), offset_tuple.1));
+        let element_offset = self.element_layout.from_cell_offset((self.line_axis.major(offset_tuple.0.to_size()), offset_tuple.2));
+        Vec2::from(self.line_axis.pack(element_offset, line_offset))
+    }
+
     pub fn table_size(&self) -> Size {
         Size::from(self.line_axis.pack(
             self.element_layout.size(),
@@ -78,6 +91,13 @@ impl TableLayout {
         match table_axis {
             TableAxis::LineAxis => {self.line_axis}
             TableAxis::ElementAxis => {self.line_axis.cross()}
+        }
+    }
+
+    pub fn header_direction(&self, table_axis: TableAxis) -> Axis {
+        match table_axis {
+            TableAxis::LineAxis => {self.line_axis.cross()}
+            TableAxis::ElementAxis => {self.line_axis}
         }
     }
 
@@ -138,6 +158,21 @@ impl AxisLayout {
         self.max_additional_size = self.layout[index].calc_space(size, self.max_additional_size);
     }
 
+    pub fn as_cell_offset(&self, mut offset: f64) -> (f64, u64) {
+        assert!(offset >= 0.0);
+        for (index, element) in self.layout.iter().enumerate() {
+            if element.size >= offset {
+                return (offset, index as u64);
+            }
+            offset -= element.size;
+        }
+        panic!("no axis part found")
+    }
+
+    pub fn from_cell_offset(&self, offset: (f64, u64)) -> f64 {
+        self.layout.iter().take(offset.1 as usize).map(AxisPart::size).sum::<f64>() + offset.0
+    }
+
     pub fn current_layout(&self, index: usize) -> (f64, f64) {
         let mut iter = self.layout.iter();
 
@@ -146,18 +181,19 @@ impl AxisLayout {
     }
 
     pub fn set_length(&mut self, length: usize, new: AxisPart) {
-        if self.layout.len() > length {
-            self.layout.truncate(length);
-        } else {
-            self.layout.reserve(length - self.layout.len());
-            while self.layout.len() < length {
-                self.layout.push(new);
-            }
-        }
+        set_len(&mut self.layout, length, ||new);
     }
 
     pub fn add_part(&mut self, part: AxisPart) {
         self.layout.push(part);
+    }
+
+    pub fn get(&self, index: usize) -> AxisPart {
+        self.layout[index]
+    }
+
+    pub fn set(&mut self, index: usize, part: AxisPart) {
+        self.layout[index] = part;
     }
 
     pub fn length(&self) -> usize {
