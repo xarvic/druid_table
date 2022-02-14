@@ -91,11 +91,9 @@ impl<
         let Self {outer_lens, widgets, generate, ..} = self;
         outer_lens.with(data, |data| {
             if widgets.len() > data.data_len() {
-                println!("remove {} widgets", widgets.len() - data.data_len());
                 widgets.truncate(data.data_len());
                 true
             } else if widgets.len() < data.data_len() {
-                println!("add {} widgets", data.data_len() - widgets.len());
                 widgets.extend(std::iter::repeat_with(generate).take(data.data_len() - widgets.len()));
                 true
             } else {
