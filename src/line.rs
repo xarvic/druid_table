@@ -13,11 +13,11 @@ pub trait TableLine<T> {
 
     fn update(&mut self, ctx: &mut UpdateCtx, data: &T, env: &Env);
 
-    fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize);
+    fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env, meta: &TableLayout, line_index: usize);
 
     fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize);
 
-    fn arrange(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize);
+    fn arrange(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &TableLayout, line_index: usize);
 
     fn element_count(&self, data: &T) -> usize;
 }
@@ -35,7 +35,7 @@ impl<T: Data> TableLine<T> for Box<dyn TableLine<T>> {
         self.deref_mut().update(ctx, data, env);
     }
 
-    fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize) {
+    fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env, meta: &TableLayout, line_index: usize) {
         self.deref_mut().paint(ctx, data, env, meta, line_index);
     }
 
@@ -43,7 +43,7 @@ impl<T: Data> TableLine<T> for Box<dyn TableLine<T>> {
         self.deref_mut().layout(ctx, bc, data, env, meta, line_index);
     }
 
-    fn arrange(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize) {
+    fn arrange(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &TableLayout, line_index: usize) {
         self.deref_mut().arrange(ctx, data, env, meta, line_index);
     }
 
@@ -149,7 +149,7 @@ impl<
         }
     }
 
-    fn paint(&mut self, ctx: &mut PaintCtx, data: &S, env: &Env, _: &mut TableLayout, _: usize) {
+    fn paint(&mut self, ctx: &mut PaintCtx, data: &S, env: &Env, _: &TableLayout, _: usize) {
         let Self {outer_lens, inner_lens, widgets, ..} = self;
         outer_lens.with(data, |data|data.for_each(|data, index|inner_lens.with(data, |data|{
             widgets[index].paint(ctx, data, env);
@@ -167,7 +167,7 @@ impl<
         })));
     }
 
-    fn arrange(&mut self, ctx: &mut LayoutCtx, data: &S, env: &Env, meta: &mut TableLayout, line_index: usize) {
+    fn arrange(&mut self, ctx: &mut LayoutCtx, data: &S, env: &Env, meta: &TableLayout, line_index: usize) {
         let Self {outer_lens, inner_lens, widgets, ..} = self;
         outer_lens.with(data, |data|data.for_each(|data, index|inner_lens.with(data, |data|{
             widgets[index].set_origin(ctx, data, env, meta.layout_rect(line_index, index).origin());
