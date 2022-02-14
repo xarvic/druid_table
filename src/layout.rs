@@ -65,8 +65,8 @@ impl TableLayout {
     }
 
     pub fn as_cell_offset(&self, offset: Vec2) -> (Vec2, u64, u64) {
-        let line_offset = self.line_layout.as_cell_offset(self.line_axis.major(offset.to_size()));
-        let element_offset = self.element_layout.as_cell_offset(self.line_axis.minor(offset.to_size()));
+        let line_offset = self.line_layout.as_cell_offset(self.line_axis.minor(offset.to_size()));
+        let element_offset = self.element_layout.as_cell_offset(self.line_axis.major(offset.to_size()));
         (Vec2::from(self.line_axis.pack(element_offset.0, line_offset.0)), line_offset.1, element_offset.1)
     }
 

@@ -9,17 +9,17 @@ use crate::{AxisPart, Static, Table, TableAxis, TableLayout, TableLine, TablePol
 use crate::util::set_len;
 
 pub struct HeaderTable<T: Data, P: TablePolicy<T>> {
-    table: WidgetPod<T, ClipBox<T, Table<T, P>>>,
+    table: WidgetPod<T, Scroll<T, Table<T, P>>>,
 
     line_header: WidgetPod<T, ClipBox<T, Header<T>>>,
     line_header_width: f64,
     element_header: Option<WidgetPod<T, ClipBox<T, Header<T>>>>,
     element_header_width: f64,
 
-    scroll_component: ScrollComponent,
+    last_view_origin: Point,
 }
 
-type HeaderBuilder<T> = Box<dyn FnMut(&T, &T, usize, &mut Vec<HeaderWidget<T>>, &mut UpdateCtx)>;
+type HeaderBuilder<T> = Box<dyn FnMut(&T, &T, usize, &mut Vec<HeaderWidget<T>>)>;
 
 pub type HeaderWidget<T> = WidgetPod<HeaderData<T>, Box<dyn Widget<HeaderData<T>>>>;
 
@@ -42,11 +42,7 @@ impl<T: Data, P: TablePolicy<T>> HeaderTable<T, P> {
         let layout = Rc::new(RefCell::new(TableLayout::new(axis)));
 
         Self {
-            table: WidgetPod::new(
-                ClipBox::new(Table::new(policy, layout.clone()))
-                    .constrain_vertical(true)
-                    .constrain_horizontal(true)
-                ),
+            table: WidgetPod::new(Scroll::new(Table::new(policy, layout.clone()))),
             line_header: WidgetPod::new(
                 ClipBox::new(Header::new(line_headers, layout, TableAxis::LineAxis))
                     .constrain_vertical(true)
@@ -55,20 +51,17 @@ impl<T: Data, P: TablePolicy<T>> HeaderTable<T, P> {
             line_header_width,
             element_header: None,
             element_header_width: 0.0,
-            scroll_component: ScrollComponent::new(),
+            last_view_origin: Point::ORIGIN,
         }
     }
 
     pub fn with_element_header(mut self, builder: impl Fn() -> Box<dyn Widget<HeaderData<T>>> + 'static, element_header_width: f64) -> Self {
         self.element_header = Some(WidgetPod::new(ClipBox::new(Header::new(
-            Box::new(move|_, _, length, list, ctx| {
-                if list.len() != length {
-                    ctx.children_changed();
-                    set_len(list, length, ||WidgetPod::new(builder()));
-                }
+            Box::new(move|_, _, length, list| {
+                set_len(list, length, ||WidgetPod::new(builder()));
             }),
             self.table.widget().child().layout.clone(),
-            TableAxis::LineAxis
+            TableAxis::ElementAxis
         ))
             .constrain_horizontal(true)
             .constrain_vertical(true)
@@ -77,32 +70,15 @@ impl<T: Data, P: TablePolicy<T>> HeaderTable<T, P> {
         self
     }
 
-    fn adjust_scrolling(&mut self, table_axis: Axis) {
-        let scroll_offset = self.table.widget().viewport_origin();
+    fn adjust_scrolling(&mut self) {
+        let table_axis = self.table_layout().line_axis();
 
-        let line_offset = table_axis.minor_pos(scroll_offset);
+        let line_offset = table_axis.minor_pos(self.last_view_origin);
         self.line_header.widget_mut().pan_to(Point::from(table_axis.pack(0.0, line_offset)));
 
-        let element_offset = table_axis.major_pos(scroll_offset);
+        let element_offset = table_axis.major_pos(self.last_view_origin);
         if let Some(element_header) = &mut self.element_header {
             element_header.widget_mut().pan_to(Point::from(table_axis.pack(element_offset, 0.0)));
-        }
-    }
-
-    fn with_port(&mut self, update: impl FnOnce(&mut Viewport, &mut ScrollComponent)) {
-        let mut changed = false;
-        let Self {table, scroll_component, ..} = self;
-        table.widget_mut().with_port(|viewport|{
-            let old_vieworigin = viewport.view_origin;
-            update(viewport, scroll_component);
-            if old_vieworigin != viewport.view_origin {
-                changed = true;
-            }
-        });
-
-        if changed {
-            let axis = self.table_layout().line_axis();
-            self.adjust_scrolling(axis);
         }
     }
 
@@ -113,7 +89,7 @@ impl<T: Data, P: TablePolicy<T>> HeaderTable<T, P> {
 
 impl<T: Data> HeaderTable<T, Static> {
     pub fn new_static(axis: Axis, line_header_width: f64) -> Self {
-        Self::new_dynamic(axis, Static, Box::new(|_, _, _, _, _|()), line_header_width)
+        Self::new_dynamic(axis, Static, Box::new(|_, _, _, _|()), line_header_width)
     }
 
     pub fn with_custom_line<L: TableLine<T> + 'static>(mut self, line: L, header: impl Widget<HeaderData<T>> + 'static) -> Self {
@@ -139,58 +115,24 @@ impl<T: Data> HeaderTable<T, Static> {
 
 impl<T: Data, P: TablePolicy<T>> Widget<T> for HeaderTable<T, P> {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut T, env: &Env) {
-        self.with_port(|port, scroll_component| {
-            scroll_component.event(port, ctx, event, env);
-        });
-
-        if !ctx.is_handled() {
-            self.table.event(ctx, event, data, env);
-            self.line_header.event(ctx, event, data, env);
-            if let Some(element_header) = &mut self.element_header {
-                element_header.event(ctx, event, data, env);
-            }
+        self.table.event(ctx, event, data, env);
+        self.line_header.event(ctx, event, data, env);
+        if let Some(element_header) = &mut self.element_header {
+            element_header.event(ctx, event, data, env);
         }
 
-        // Handle scroll after the inner widget processed the events, to prefer inner widgets while
-        // scrolling.
-        self.with_port(|port, scroll_component| {
-            scroll_component.handle_scroll(port, ctx, event, env);
-        });
+        //TODO: handle SCROLL_TO_VIEW from headers
 
-        if !self.scroll_component.are_bars_held() {
-            // We only scroll to the component if the user is not trying to move the scrollbar.
-            if let Event::Notification(notification) = event {
-                if let Some(& (mut global_highlight_rect)) = notification.get(SCROLL_TO_VIEW) {
-                    ctx.set_handled();
-
-                    //TODO: fix
-
-                    if notification.route() != self.table.id() {
-                        let clipped_axis = if notification.route() == self.line_header.id() {
-                            self.table_layout().line_axis()
-                        } else {
-                            self.table_layout().line_axis().cross()
-                        };
-                        let clipped_span = clipped_axis.major_span(global_highlight_rect);
-                        global_highlight_rect = Rect::from_points(
-                            clipped_axis.pack(clipped_span.0, 0.0),
-                            clipped_axis.pack(clipped_span.1, 0.0),
-                        );
-                    };
-
-                    let view_port_changed = self.table.widget_mut().default_scroll_to_view_handling(ctx, global_highlight_rect);
-
-                    if view_port_changed {
-                        self.scroll_component
-                            .reset_scrollbar_fade(|duration| ctx.request_timer(duration), env);
-                    }
-                }
-            }
+        //Sync headers with content
+        let new_view_origin = self.table.widget().offset().to_point();
+        if new_view_origin != self.last_view_origin {
+            self.last_view_origin = new_view_origin;
+            self.adjust_scrolling();
+            ctx.request_paint();
         }
     }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
-        self.scroll_component.lifecycle(ctx, event, env);
         self.table.lifecycle(ctx, event, data, env);
         self.line_header.lifecycle(ctx, event, data, env);
         if let Some(element_header) = &mut self.element_header {
@@ -218,8 +160,8 @@ impl<T: Data, P: TablePolicy<T>> Widget<T> for HeaderTable<T, P> {
 
         //Layout Table
         let old_table_size = self.table.layout_rect().size();
-        let offset = self.table.widget().viewport_origin();
-        let cell_offset = self.table_layout().as_cell_offset(offset.to_vec2());
+        let offset = self.table.widget().offset();
+        let cell_offset = self.table_layout().as_cell_offset(offset);
 
         let table_size = self.table.layout(ctx, &table_bc, data, env);
         self.table.set_origin(ctx, data, env, header_space.to_vec2().to_point());
@@ -227,18 +169,21 @@ impl<T: Data, P: TablePolicy<T>> Widget<T> for HeaderTable<T, P> {
         // Adjust Scroll to point to the same cell.
         // This is important for virtual scrolling.
         //TODO: allow sticky borders
-        let offset = self.table_layout().from_cell_offset(cell_offset);
-        self.with_port(|port, _|{port.pan_to(offset.to_point());});
+        let view_origin = self.table_layout().from_cell_offset(cell_offset).to_point();
+        if view_origin != self.last_view_origin {
+            self.last_view_origin = view_origin;
 
-        if old_table_size != table_size {
-            self.scroll_component.reset_scrollbar_fade(|duration|ctx.request_timer(duration), env);
+            // This is a hack until we can use ScrollComponent directly
+            let view_rect = Rect::from_origin_size(view_origin, self.table.layout_rect().size());
+            self.table.widget_mut().scroll_to(view_rect);
+            self.adjust_scrolling();
         }
 
         //Layout Headers
         self.line_header.layout(ctx, &BoxConstraints::tight(Size::from(table_axis.pack(self.line_header_width, table_axis.minor(table_size)))), data, env);
         self.line_header.set_origin(ctx, data, env, Point::from(table_axis.pack(0.0, self.element_header_width)));
         if let Some(element_header) = &mut self.element_header {
-            element_header.layout(ctx, &BoxConstraints::tight(Size::from(table_axis.pack(self.element_header_width, table_axis.minor(table_size)))), data, env);
+            element_header.layout(ctx, &BoxConstraints::tight(Size::from(table_axis.pack(table_axis.major(table_size), self.element_header_width))), data, env);
             element_header.set_origin(ctx, data, env, Point::from(table_axis.pack(self.line_header_width, 0.0)));
         }
 
@@ -247,10 +192,6 @@ impl<T: Data, P: TablePolicy<T>> Widget<T> for HeaderTable<T, P> {
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {
         self.table.paint(ctx, data, env);
-        ctx.with_save(|ctx|{
-            ctx.transform(Affine::translate(self.table.layout_rect().origin().to_vec2()));
-            self.scroll_component.draw_bars(ctx, &self.table.widget().viewport(), env);
-        });
         self.line_header.paint(ctx, data, env);
         if let Some(element_header) = &mut self.element_header {
             element_header.paint(ctx, data, env);
@@ -306,6 +247,9 @@ impl<T: Data> Widget<T> for Header<T> {
     }
 
     fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, data: &T, env: &Env) {
+        let length = self.layout.deref().borrow().table_axis(self.table_axis).length();
+        (self.builder)(data, data, length, &mut self.widgets);
+
         self.for_each(data, |data, widget|widget.lifecycle(ctx, event, data, env));
     }
 
@@ -313,8 +257,10 @@ impl<T: Data> Widget<T> for Header<T> {
         self.for_each(data, |data, widget|widget.update(ctx, data, env));
 
         let length = self.layout.deref().borrow().table_axis(self.table_axis).length();
-
-        (self.builder)(old_data, data, length, &mut self.widgets, ctx);
+        if length != self.widgets.len() {
+            (self.builder)(old_data, data, length, &mut self.widgets);
+            ctx.children_changed();
+        }
     }
 
     fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &T, env: &Env) -> Size {
@@ -330,7 +276,7 @@ impl<T: Data> Widget<T> for Header<T> {
                 Size::from(axis.pack(data.part.size(), max_cross)),
             );
             let size = widget.layout(ctx, &inner_bc, data, env);
-            widget.set_origin(ctx, data, env, dbg!(Point::from(axis.pack(advance, 0.0))));
+            widget.set_origin(ctx, data, env, Point::from(axis.pack(advance, 0.0)));
 
             cross_width = cross_width.max(axis.minor(size));
             advance += data.part.size();
@@ -341,5 +287,23 @@ impl<T: Data> Widget<T> for Header<T> {
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {
         self.for_each(data, |data, widget|widget.paint(ctx, data, env));
+    }
+}
+
+impl<T: Data> HeaderData<T> {
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    pub fn width(&self) -> f64 {
+        self.part.size()
+    }
+
+    pub fn data(&self) -> &T {
+        &self.data
+    }
+
+    pub fn data_mut(&mut self) -> &mut T {
+        &mut self.data
     }
 }

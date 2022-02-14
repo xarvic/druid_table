@@ -3,7 +3,7 @@ use druid::{AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens, ArcStr};
 use druid::im::Vector;
 use druid::lens::Identity;
 use druid::widget::{Axis, Button, Flex, Label, Slider, TextBox};
-use druid_table::{HeaderTable, HeaderWidget, Static, Table};
+use druid_table::{HeaderData, HeaderTable, HeaderWidget, Static, Table};
 
 #[derive(Clone, Data, Lens)]
 struct AppData {
@@ -15,7 +15,12 @@ fn root_widget() -> impl Widget<Vector<AppData>> {
 
     let table = HeaderTable::new_static(Axis::Vertical, 20.0)
         .with_line(Identity, AppData::name, ||TextBox::multiline(), Label::new("Name".to_string()))
-        .with_line(Identity, AppData::count, ||Slider::new().with_range(0.0, 10.0), Label::new("Value".to_string()));
+        .with_line(Identity, AppData::count, ||Slider::new().with_range(0.0, 10.0), Label::new("Value".to_string()))
+        .with_line(Identity, AppData::name, ||TextBox::multiline(), Label::new("Name".to_string()))
+        .with_line(Identity, AppData::count, ||Slider::new().with_range(0.0, 10.0), Label::new("Value".to_string()))
+        .with_element_header(||{
+            Box::new(Label::dynamic(|data: &HeaderData<_>, _|data.index().to_string()))
+        }, 30.0);
     Flex::column()
         .with_flex_child(table, 1.0)
         .with_child(
