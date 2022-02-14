@@ -1,9 +1,9 @@
 use std::sync::Arc;
-use druid::{AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens, ArcStr};
+use druid::{AppLauncher, Widget, WidgetExt, WindowDesc, Data, Lens};
 use druid::im::Vector;
 use druid::lens::Identity;
 use druid::widget::{Axis, Button, Flex, Label, Slider, TextBox};
-use druid_table::{HeaderData, HeaderTable, HeaderWidget, Static, Table};
+use druid_table::{HeaderData, HeaderTable};
 
 #[derive(Clone, Data, Lens)]
 struct AppData {

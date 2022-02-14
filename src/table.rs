@@ -1,9 +1,7 @@
-use std::borrow::{Borrow, BorrowMut};
 use std::cell::{RefCell, RefMut};
 use std::ops::Deref;
 use std::rc::Rc;
 use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Data, Lens, LifeCycle, LifeCycleCtx, PaintCtx, Size, UpdateCtx, Widget};
-use druid::lens::Ref;
 use druid::widget::{Axis, ListIter};
 use crate::{Static, TableLine, TableLayout, TablePolicy, WidgetTableLine, DefaultTableController, DefaultTablePainter};
 use crate::controller::TableController;
@@ -37,7 +35,7 @@ impl<T: Data> Table<T, Static> {
         L2: Lens<U, V> + 'static,
         W: Widget<V> + 'static,
         F: Fn() -> W + 'static,
-    >(mut self, outer_lens: L1, inner_lens: L2, widget: F) -> Self {
+    >(self, outer_lens: L1, inner_lens: L2, widget: F) -> Self {
         self.with_custom_line(WidgetTableLine::new(outer_lens, inner_lens, widget))
     }
 
@@ -130,7 +128,7 @@ impl<T: Data, P: TablePolicy<T>> Widget<T> for Table<T, P> {
         layout.prepare_layout(bc.max());
 
         for (index, line) in self.lines.iter_mut().enumerate() {
-            line.layout(ctx, bc, data, env, &mut *layout, index);
+            line.layout(ctx, data, env, &mut *layout, index);
         }
         for (index, line) in self.lines.iter_mut().enumerate() {
             line.arrange(ctx, data, env, &layout, index);
@@ -140,7 +138,7 @@ impl<T: Data, P: TablePolicy<T>> Widget<T> for Table<T, P> {
     }
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env) {
-        let mut layout = self.layout.deref().borrow();
+        let layout = self.layout.deref().borrow();
         let mut content = TableContent {lines: &mut self.lines};
 
         self.painter.paint(ctx, data, env, &mut content, &layout);

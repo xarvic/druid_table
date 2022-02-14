@@ -1,10 +1,8 @@
 use std::cell::{RefCell, RefMut};
 use std::ops::Deref;
 use std::rc::Rc;
-use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Lens, LifeCycle, LifeCycleCtx, PaintCtx, Point, Rect, Size, UpdateCtx, Vec2, Widget, WidgetPod, Data, RenderContext, Affine};
-use druid::commands::SCROLL_TO_VIEW;
-use druid::scroll_component::ScrollComponent;
-use druid::widget::{Axis, ClipBox, ListIter, Scroll, Viewport};
+use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Lens, LifeCycle, LifeCycleCtx, PaintCtx, Point, Rect, Size, UpdateCtx, Widget, WidgetPod, Data};
+use druid::widget::{Axis, ClipBox, ListIter, Scroll};
 use crate::{AxisPart, Static, Table, TableAxis, TableLayout, TableLine, TablePolicy, WidgetTableLine};
 use crate::util::set_len;
 
@@ -108,7 +106,7 @@ impl<T: Data> HeaderTable<T, Static> {
         W: Widget<V> + 'static,
         F: Fn() -> W + 'static,
 
-    >(mut self, outer_lens: L1, inner_lens: L2, widget: F, header: impl Widget<HeaderData<T>> + 'static) -> Self {
+    >(self, outer_lens: L1, inner_lens: L2, widget: F, header: impl Widget<HeaderData<T>> + 'static) -> Self {
         self.with_custom_line(WidgetTableLine::new(outer_lens, inner_lens, widget), header)
     }
 }
@@ -140,7 +138,7 @@ impl<T: Data, P: TablePolicy<T>> Widget<T> for HeaderTable<T, P> {
         }
     }
 
-    fn update(&mut self, ctx: &mut UpdateCtx, old_data: &T, data: &T, env: &Env) {
+    fn update(&mut self, ctx: &mut UpdateCtx, _: &T, data: &T, env: &Env) {
         self.table.update(ctx, data, env);
         self.line_header.update(ctx, data, env);
         if let Some(element_header) = &mut self.element_header {
@@ -159,7 +157,6 @@ impl<T: Data, P: TablePolicy<T>> Widget<T> for HeaderTable<T, P> {
         let table_bc = bc.shrink(header_space);
 
         //Layout Table
-        let old_table_size = self.table.layout_rect().size();
         let offset = self.table.widget().offset();
         let cell_offset = self.table_layout().as_cell_offset(offset);
 

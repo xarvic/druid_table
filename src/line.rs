@@ -1,8 +1,6 @@
-use std::cmp::max;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use druid::{BoxConstraints, Env, Event, EventCtx, LayoutCtx, Lens, LifeCycle, LifeCycleCtx, PaintCtx, Point, UpdateCtx, Widget, WidgetPod, Data, Size};
-use druid::lens::Identity;
+use druid::{Env, Event, EventCtx, LayoutCtx, Lens, LifeCycle, LifeCycleCtx, PaintCtx, UpdateCtx, Widget, WidgetPod, Data};
 use druid::widget::ListIter;
 use crate::TableLayout;
 
@@ -15,7 +13,7 @@ pub trait TableLine<T> {
 
     fn paint(&mut self, ctx: &mut PaintCtx, data: &T, env: &Env, meta: &TableLayout, line_index: usize);
 
-    fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize);
+    fn layout(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize);
 
     fn arrange(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &TableLayout, line_index: usize);
 
@@ -39,8 +37,8 @@ impl<T: Data> TableLine<T> for Box<dyn TableLine<T>> {
         self.deref_mut().paint(ctx, data, env, meta, line_index);
     }
 
-    fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize) {
-        self.deref_mut().layout(ctx, bc, data, env, meta, line_index);
+    fn layout(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &mut TableLayout, line_index: usize) {
+        self.deref_mut().layout(ctx, data, env, meta, line_index);
     }
 
     fn arrange(&mut self, ctx: &mut LayoutCtx, data: &T, env: &Env, meta: &TableLayout, line_index: usize) {
@@ -90,7 +88,7 @@ impl<
     }
 
     fn update_widget_count(&mut self, data: &S) -> bool {
-        let Self {outer_lens, inner_lens, widgets, generate, ..} = self;
+        let Self {outer_lens, widgets, generate, ..} = self;
         outer_lens.with(data, |data| {
             if widgets.len() > data.data_len() {
                 println!("remove {} widgets", widgets.len() - data.data_len());
@@ -156,7 +154,7 @@ impl<
         })));
     }
 
-    fn layout(&mut self, ctx: &mut LayoutCtx, bc: &BoxConstraints, data: &S, env: &Env, meta: &mut TableLayout, line_index: usize) {
+    fn layout(&mut self, ctx: &mut LayoutCtx, data: &S, env: &Env, meta: &mut TableLayout, line_index: usize) {
         let Self {outer_lens, inner_lens, widgets, ..} = self;
         outer_lens.with(data, |data|data.for_each(|data, index|inner_lens.with(data, |data|{
             meta.layout(line_index, index, |bc|{

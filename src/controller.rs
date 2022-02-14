@@ -1,6 +1,6 @@
 use druid::{Env, Event, EventCtx, LifeCycle, LifeCycleCtx, UpdateCtx, Data};
 use crate::table::TableContent;
-use crate::{TableLayout, TableLine};
+use crate::TableLayout;
 
 pub trait TableController<T> {
     fn event(&mut self, ctx: &mut EventCtx, event: &Event, data: &mut T, env: &Env, content: &mut TableContent<T>, layout: &TableLayout);
