@@ -265,7 +265,7 @@ impl<T: Data> Widget<T> for Header<T> {
         let max_cross = axis.minor(bc.max());
 
         let mut cross_width: f64 = 0.0;
-        let mut advance = 0.0;
+        let mut advance = self.layout.deref().borrow().table_axis(self.table_axis).start_padding();
 
         self.for_each(data, |data, widget|{
             let inner_bc = BoxConstraints::new(
@@ -276,7 +276,7 @@ impl<T: Data> Widget<T> for Header<T> {
             widget.set_origin(ctx, data, env, Point::from(axis.pack(advance, 0.0)));
 
             cross_width = cross_width.max(axis.minor(size));
-            advance += data.part.size();
+            advance += data.part.advance();
         });
 
         Size::from(axis.pack(advance, cross_width))

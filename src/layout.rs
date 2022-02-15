@@ -12,10 +12,12 @@ pub struct TableLayout {
 pub struct AxisLayout {
     layout: Vec<AxisPart>,
     max_additional_size: f64,
+    start_padding: f64,
 }
 
 #[derive(Clone, Copy, Data)]
 pub struct AxisPart {
+    end_padding: f64,
     size: f64,
     min: f64,
     max: f64,
@@ -130,13 +132,22 @@ impl TableLayout {
             TableAxis::ElementAxis => {&mut self.element_layout}
         }
     }
+
+    pub fn direction_axis(&self, axis: Axis) -> &AxisLayout {
+        if self.line_axis == axis {
+            &self.line_layout
+        } else {
+            &self.element_layout
+        }
+    }
 }
 
 impl AxisLayout {
     pub fn new() -> Self {
         Self {
             layout: vec![],
-            max_additional_size: 0.0
+            max_additional_size: 0.0,
+            start_padding: 1.0,
         }
     }
 
@@ -146,7 +157,7 @@ impl AxisLayout {
             if !part.is_fixed {
                 part.size = part.min;
             }
-            self.max_additional_size -= part.size;
+            self.max_additional_size -= part.advance();
         }
     }
 
@@ -159,24 +170,24 @@ impl AxisLayout {
     }
 
     pub fn as_cell_offset(&self, mut offset: f64) -> (f64, u64) {
-        assert!(offset >= 0.0);
+        offset -= self.start_padding;
         for (index, element) in self.layout.iter().enumerate() {
-            if element.size >= offset {
-                return (offset, index as u64);
+            if element.advance() >= offset || index == self.layout.len() - 1 {
+                return (offset, index as u64)
             }
-            offset -= element.size;
+            offset -= element.advance();
         }
-        panic!("no axis part found")
+        unreachable!("loop should break during the last iteration")
     }
 
     pub fn from_cell_offset(&self, offset: (f64, u64)) -> f64 {
-        self.layout.iter().take(offset.1 as usize).map(AxisPart::size).sum::<f64>() + offset.0
+        self.layout.iter().take(offset.1 as usize).map(AxisPart::advance).sum::<f64>() + offset.0 + self.start_padding
     }
 
     pub fn current_layout(&self, index: usize) -> (f64, f64) {
         let mut iter = self.layout.iter();
 
-        let l1 = (&mut iter).take(index).map(AxisPart::size).sum();
+        let l1 = (&mut iter).take(index).map(AxisPart::advance).sum::<f64>() + self.start_padding;
         (l1, l1 + iter.next().unwrap().size())
     }
 
@@ -201,7 +212,15 @@ impl AxisLayout {
     }
 
     pub fn size(&self) -> f64 {
-        self.layout.iter().map(AxisPart::size).sum()
+        self.layout.iter().map(AxisPart::advance).sum::<f64>() + self.start_padding
+    }
+
+    pub fn start_padding(&self) -> f64 {
+        self.start_padding
+    }
+
+    pub fn parts(&self) -> &[AxisPart] {
+        &self.layout
     }
 }
 
@@ -212,11 +231,16 @@ impl AxisPart {
             min: size.unwrap_or(0.0),
             max: size.unwrap_or(f64::INFINITY),
             is_fixed: size.is_some(),
+            end_padding: 1.0,
         }
     }
 
     pub fn size(&self) -> f64 {
         self.size
+    }
+
+    pub fn advance(&self) -> f64 {
+        self.size + self.end_padding
     }
 
     pub fn constrains(&self, max_additional_size: f64) -> (f64, f64) {
